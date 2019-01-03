@@ -1,0 +1,154 @@
+/// Init
+dir = -1;					// direction the player is facing
+spd = 7;					// speed the player will move at
+g = 0.2;					// gravity that applies to the player
+sprite_index = sIdle1;		// animation to play
+anim_speed = 0.7;			// default speed of the animation
+image_speed = anim_speed;	// animation speed
+health = 5;					// heath of the player
+can_climb = false;			// flag if the player can climb
+climbing = false;			// flag if the player is climbing
+xspeed = 6;					// horizontal speed of the player
+yspeed = -6;				// vertical speed of the player	
+fall = false;				// flag if the player is falling
+grav=0;						// gravity that applies to the player
+gravmax=12;					// terminal velocity when falling
+gravdelta=1.2;				// difference in gravity
+grav_jump = -18;			// jump gravity
+jump=false;					// flag if the player is jumping
+
+// camera that follows the player
+view_enabled = true;
+view_visible[0] = true;
+view_xport[0] = 0;
+view_yport[0] = 0;
+view_wport[0] = 960;
+view_hport[0] = 540;
+view_camera[0] = camera_create_view(0, 0, view_wport[0], view_hport[0], 0, oPlayer, -1, -1, 1000, 1000);
+surface_resize(application_surface, 960, 540);
+window_set_size(view_wport[0],view_hport[0]);
+
+// set the deadzone for gamepad input
+gamepad_set_axis_deadzone(0,0.2);
+
+
+\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+var xx,yy,c1,c2,c3,c4;
+
+// Apply gravity (and jumping)
+y = y+grav;
+grav+=gravdelta;
+if( grav>=gravmax ) grav=gravmax;
+
+/////////////////////
+//    JUMP/FALL    //
+/////////////////////
+
+if(!jump){									// if we are already jumping dont do anything
+	if((keyboard_check(vk_space)) || (gamepad_button_check(0,gp_face1))){
+		grav=grav_jump;						// make the player jump
+		jump=true;							// flag that we are jumping	
+	}
+}
+
+
+
+if( grav<0 ){								// If jumping check above player
+    sprite_index = sJump;
+} else {									// otherwise, falling so check UNDER the player
+    if(jump){								// if coming down after jumping display the correct sprite
+        sprite_index = sJumpFall;
+    } else if(fall){						// if falling from an edge display the fall sprite
+        sprite_index = sFall;    
+    } else {								// if not already falling or jumping
+		grav = 0;							// first stop falling (used for ladders)
+		fall = true;						// flag that we are falling
+	}
+	// check the points at the bottom of the player character
+	c1 = tilemap_get_at_pixel(oGame.map,x-(sprite_get_width(sprite_index)/2),y);	// left
+	c2 = tilemap_get_at_pixel(oGame.map,x+(sprite_get_width(sprite_index)/2),y);	// right
+	c3 = tilemap_get_at_pixel(oGame.map,x,y);					// center
+
+	if( c1>=1 || c2>=1 || c3 >= 1){			// if they are intersecting with a tile
+		if((c1 == 1) || (c2 == 1) || (c3 == 1) || (c1 == 3) || (c2 == 3) || (c3 == 3)){
+			// if the tile we are intersecting with cannot be fallen through
+			y = real(y&$ffffffc0);			// move the sprite to the top of the tile
+			sprite_index = choose(sIdle1);	// set the sprite to the idle sprite
+			climbing = false;				// stop any climbing
+			jump = false;					// stop any jumping
+			fall = false;					// stop any falling
+		}
+		if((c3 == 2) || (c3 == 2)){			// if we are intersecting with a ladder
+			can_climb = true;				// flag that we can climb
+		}
+	} else {								// if we are not intersecting any tiles
+		climbing = false;					// flag that we cannot climb
+	}
+}    
+
+/////////////////////
+//     MOVING      //
+/////////////////////
+
+if((keyboard_check(vk_left)) || (oGame.button_down_left == true) || (gamepad_button_check(0,gp_padl)) || (move_left)){				// moving left collisions
+    dir=-1;									// set the correct direction
+	image_xscale = dir;						// make the sprite face the correct direction
+	climbing = false;						// since we are moving left we are not climbing
+	can_climb = false;						// and we cannot climb
+    if(!jump && !fall){						// if we are not jumping or falling
+        sprite_index = sWalk;				// set the sprite to walking
+    }
+    x=x-xspeed								// move the player left
+    c2 = -1;
+	c3 = -1;
+	// check the points at the bottom of the sprite
+    c1 = tilemap_get_at_pixel(oGame.map,x-(sprite_get_width(sprite_index)/2),y-1);				// left
+    c3 = tilemap_get_at_pixel(oGame.map,x,y-1);													// center
+    if( y&$3f>0 ) c2=tilemap_get_at_pixel(oGame.map,x-(sprite_get_width(sprite_index)/2),y+1);	// left below (only check if there is a tile below)
+    if(c1 == 3) || (c2 == 3){																	// if we are intersecting with a box
+		x = real(x&$ffffffc0)+(sprite_get_width(sprite_index)/2);								// stop the player from moving
+    }
+	if(c3 == 2){							// if we are intersecting with a ladder
+		can_climb = true;					// flag that we can climb
+	} else {								// if we are not a ladder
+		can_climb = false;					// flag we cant climb
+		image_speed = anim_speed;			// make sure the animations will play at correct speed
+	}
+	if(x < 0){								// the the player has moved off the edge of the screen
+		x = room_width;						// wrap around to the other side of the screen
+	}
+}else if((keyboard_check(vk_right)) || (oGame.button_down_right == true) || (gamepad_button_check(0,gp_padr)) || (move_right)){			// moving right collisions (check with else so that both directions cant be triggered at the same time)
+    dir=1;									// set the correct direction
+	image_xscale = dir;						// make the sprte face the correct direction 
+	climbing = false;						// set that we are not climbing
+	can_climb = false;						// set that we cant climb
+    if(!jump && !fall){						// if we are not jumping or falling
+        sprite_index = sWalk;				// set the sprite to walking
+    }
+    x=x+xspeed;								// move the player right
+    c2 = -1;
+	c3 = -1;
+	// check the points at the bottom of the sprite
+    c1 = tilemap_get_at_pixel(oGame.map,x+(sprite_get_width(sprite_index)/2),y-1);				// right
+	c3 = tilemap_get_at_pixel(oGame.map,x,y-1);													// center
+    if( y&$3f>0 ) c2=tilemap_get_at_pixel(oGame.map,x+(sprite_get_width(sprite_index)/2),y+1);	// right below (only check if there is a tile below)
+    if(c1 == 3) || (c2 == 3){																	// if we are intersecting with a box
+			x = real(x&$ffffffc0)+oGame.tilesize-(sprite_get_width(sprite_index)/2);			// stop the player from moving
+    }
+	if(c3 == 2){							// if we are intersecting with a ladder
+		can_climb = true;					// flag that we can climb
+	} else {								// if we are not a ladder
+		can_climb = false;					// flag we cant climb
+		image_speed = anim_speed;			// make sure the animations will play at correct speed
+	}
+	if(x > room_width){						// the the player has moved off the edge of the screen
+		x = 0;								// wrap around to the other side of the screen
+	}
+	
+} else if(!can_climb){						// if we are not moving left or right check that we are not climbing
+	if(!jump){
+		sprite_index = choose(sIdle1,sIdle2);	// set the sprite to one of the idles (choose at random)
+	}
+	image_speed = anim_speed;				// set the speed of the sprite to the correct level
+}
